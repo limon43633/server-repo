@@ -1,152 +1,96 @@
-const express = require('express');
-const { ObjectId } = require('mongodb');
-const { getDatabase } = require('../db/connectDB');
+import express from 'express';
+import { getDB } from '../db/connectDB.js';
+import { ObjectId } from 'mongodb';
+
 const router = express.Router();
 
-// Get all products with pagination
+// GET - Home page products (limit 6, showOnHome: true)
+router.get('/home', async (req, res) => {
+  try {
+    const db = getDB();
+    const productsCollection = db.collection('products');
+    
+    const { sort = 'latest' } = req.query;
+    
+    // Sorting logic
+    let sortOption = {};
+    if (sort === 'latest') {
+      sortOption = { createdAt: -1 };
+    } else if (sort === 'price-low') {
+      sortOption = { price: 1 };
+    } else if (sort === 'price-high') {
+      sortOption = { price: -1 };
+    }
+    
+    const products = await productsCollection
+      .find({ showOnHome: true })
+      .sort(sortOption)
+      .limit(6)
+      .toArray();
+    
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products',
+      error: error.message
+    });
+  }
+});
+
+// GET - All products (for All Products page)
 router.get('/', async (req, res) => {
-    try {
-        const db = getDatabase();
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const skip = (page - 1) * limit;
-
-        const products = await db.collection('products')
-            .find({})
-            .skip(skip)
-            .limit(limit)
-            .toArray();
-
-        const total = await db.collection('products').countDocuments();
-
-        res.json({
-            success: true,
-            data: products,
-            pagination: {
-                page,
-                limit,
-                total,
-                pages: Math.ceil(total / limit)
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
+  try {
+    const db = getDB();
+    const productsCollection = db.collection('products');
+    
+    const products = await productsCollection.find({}).toArray();
+    
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products',
+      error: error.message
+    });
+  }
 });
 
-// Get products for homepage (limited to 6)
-router.get('/homepage', async (req, res) => {
-    try {
-        const db = getDatabase();
-        const products = await db.collection('products')
-            .find({ showOnHome: true })
-            .limit(6)
-            .toArray();
-
-        res.json({
-            success: true,
-            data: products
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Get single product by ID
+// GET - Single product by ID
 router.get('/:id', async (req, res) => {
-    try {
-        const db = getDatabase();
-        const product = await db.collection('products').findOne({
-            _id: new ObjectId(req.params.id)
-        });
-
-        if (!product) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Product not found' 
-            });
-        }
-
-        res.json({ success: true, data: product });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+  try {
+    const db = getDB();
+    const productsCollection = db.collection('products');
+    const { id } = req.params;
+    
+    const product = await productsCollection.findOne({ _id: new ObjectId(id) });
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
     }
+    
+    res.status(200).json({
+      success: true,
+      data: product
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch product',
+      error: error.message
+    });
+  }
 });
 
-// Create new product (Manager only)
-router.post('/', async (req, res) => {
-    try {
-        const db = getDatabase();
-        const productData = {
-            ...req.body,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
-
-        const result = await db.collection('products').insertOne(productData);
-
-        res.status(201).json({
-            success: true,
-            message: 'Product created successfully',
-            data: { _id: result.insertedId, ...productData }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Update product
-router.put('/:id', async (req, res) => {
-    try {
-        const db = getDatabase();
-        const updateData = {
-            ...req.body,
-            updatedAt: new Date()
-        };
-
-        const result = await db.collection('products').updateOne(
-            { _id: new ObjectId(req.params.id) },
-            { $set: updateData }
-        );
-
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Product not found' 
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Product updated successfully'
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Delete product
-router.delete('/:id', async (req, res) => {
-    try {
-        const db = getDatabase();
-        const result = await db.collection('products').deleteOne({
-            _id: new ObjectId(req.params.id)
-        });
-
-        if (result.deletedCount === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Product not found' 
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Product deleted successfully'
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-module.exports = router;
+export default router;
