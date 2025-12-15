@@ -13,8 +13,10 @@ router.post('/', async (req, res) => {
 
     const orderData = req.body;
 
-    // Validate product availability
-    const product = await productsCollection.findOne({ _id: new ObjectId(orderData.productId) });
+    // Validate product exists
+    const product = await productsCollection.findOne({ 
+      _id: new ObjectId(orderData.productId) 
+    });
     
     if (!product) {
       return res.status(404).json({
@@ -33,18 +35,14 @@ router.post('/', async (req, res) => {
     // Create order
     const newOrder = {
       ...orderData,
+      productImage: product.images[0],
+      productCategory: product.category,
       status: 'pending',
-      createdAt: new Date(),
+      orderDate: new Date(),
       updatedAt: new Date()
     };
 
     const result = await ordersCollection.insertOne(newOrder);
-
-    // Update product quantity (optional - you can do this after approval)
-    // await productsCollection.updateOne(
-    //   { _id: new ObjectId(orderData.productId) },
-    //   { $inc: { availableQuantity: -orderData.orderQuantity } }
-    // );
 
     res.status(201).json({
       success: true,
@@ -70,7 +68,7 @@ router.get('/user/:userId', async (req, res) => {
 
     const orders = await ordersCollection
       .find({ userId })
-      .sort({ createdAt: -1 })
+      .sort({ orderDate: -1 })
       .toArray();
 
     res.status(200).json({
@@ -88,6 +86,45 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
+// GET - Get order by ID
+router.get('/:orderId', async (req, res) => {
+  try {
+    const db = getDB();
+    const ordersCollection = db.collection('orders');
+    const { orderId } = req.params;
+
+    if (!ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID'
+      });
+    }
+
+    const order = await ordersCollection.findOne({ 
+      _id: new ObjectId(orderId) 
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: order
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order',
+      error: error.message
+    });
+  }
+});
+
 // GET - Get all orders (for admin/manager)
 router.get('/', async (req, res) => {
   try {
@@ -96,7 +133,7 @@ router.get('/', async (req, res) => {
 
     const orders = await ordersCollection
       .find({})
-      .sort({ createdAt: -1 })
+      .sort({ orderDate: -1 })
       .toArray();
 
     res.status(200).json({
@@ -109,6 +146,60 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch orders',
+      error: error.message
+    });
+  }
+});
+
+// PUT - Update order status
+router.put('/:orderId/status', async (req, res) => {
+  try {
+    const db = getDB();
+    const ordersCollection = db.collection('orders');
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    if (!ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID'
+      });
+    }
+
+    const validStatuses = ['pending', 'approved', 'shipped', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status'
+      });
+    }
+
+    const result = await ordersCollection.updateOne(
+      { _id: new ObjectId(orderId) },
+      { 
+        $set: { 
+          status,
+          updatedAt: new Date()
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order status updated successfully'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
       error: error.message
     });
   }
