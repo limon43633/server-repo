@@ -20,7 +20,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/orders', orderRoutes); // Add this
 
-// Health check
+// Health check is ok
 app.get('/', (req, res) => {
   res.send('✅ Garments Tracker Server is Running!');
 });
